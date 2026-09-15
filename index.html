@@ -1346,6 +1346,7 @@ function renderAdminTable(){
   </tbody></table></div>
   ${totalPages > 1 ? `
     <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
+      <button class="btn secondary sm" ${ADMIN_PAGE<=1?'disabled':''} onclick="adminGoPage(1)">« Première</button>
       <button class="btn secondary sm" ${ADMIN_PAGE<=1?'disabled':''} onclick="adminGoPage(${ADMIN_PAGE-1})">← Précédent</button>
       ${adminPageNumbers(ADMIN_PAGE, totalPages).map(p => p === '…'
         ? `<span class="muted" style="padding:0 4px;">…</span>`
