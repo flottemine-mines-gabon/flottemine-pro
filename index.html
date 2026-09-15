@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>FlotteMine Pro — Gestion de flotte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --bg:#0b0f14; --panel:#121822; --panel2:#1a2230; --border:#263042;
+  --text:#e7edf5; --muted:#8ea0b8; --accent:#ff8a1e; --accent2:#ffb347;
+  --safe:#22c55e; --warn:#f5b214; --danger:#ef4444; --info:#3b9eff;
+  --radius:12px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:radial-gradient(1200px 600px at 10% -10%, #16202f 0%, var(--bg) 55%);
+  color:var(--text); font-family:'Inter',system-ui,-apple-system,sans-serif;
+  min-height:100vh; -webkit-tap-highlight-color:transparent;
+}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:#2a3648;border-radius:8px;}
+a{color:inherit;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+
+/* ---------- Utility ---------- */
+.hidden{display:none !important;}
+.row{display:flex;gap:10px;align-items:center;}
+.wrap{flex-wrap:wrap;}
+.grow{flex:1;}
+.muted{color:var(--muted);}
+.center{display:flex;align-items:center;justify-content:center;}
+
+/* ---------- Logo ---------- */
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em;}
+.logo svg{flex-shrink:0;}
+.logo b{color:var(--accent);}
+
+/* ---------- Auth / Setup screens ---------- */
+.screen-center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:100%;max-width:420px;}
+.card h1{font-size:20px;margin:0 0 4px;}
+.card p.sub{color:var(--muted);font-size:14px;margin:0 0 22px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:500;}
+.field input,.field select,.field textarea{
+  width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);font-size:14.5px;outline:none;transition:border-color .15s;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+.field textarea{resize:vertical;min-height:64px;}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px 18px;border-radius:9px;border:1px solid transparent;font-weight:600;font-size:14px;
+  background:var(--accent);color:#0b0f14;transition:filter .15s,transform .1s;white-space:nowrap;
+}
+.btn:hover{filter:brightness(1.08);}
+.btn:active{transform:scale(.98);}
+.btn.full{width:100%;}
+.btn.secondary{background:var(--panel2);color:var(--text);border-color:var(--border);}
+.btn.ghost{background:transparent;color:var(--text);border-color:var(--border);}
+.btn.danger{background:var(--danger);color:#fff;}
+.btn.sm{padding:6px 12px;font-size:12.5px;}
+.link-btn{background:none;border:none;color:var(--accent);font-size:13.5px;font-weight:600;padding:0;}
+.error-msg{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#ffb4b4;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;}
+.ok-msg{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#b7f5ce;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;}
+code{background:var(--panel2);padding:2px 6px;border-radius:5px;font-size:12.5px;}
+
+/* ---------- App layout ---------- */
+#app{display:flex;min-height:100vh;}
+.sidebar{
+  width:230px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto;
+}
+.sidebar .logo{padding:6px 8px 20px;}
+.navitem{
+  display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;color:var(--muted);
+  font-size:14px;font-weight:600;margin-bottom:2px;border:1px solid transparent;
+}
+.navitem .badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;
+  padding:1px 6px;border-radius:20px;min-width:16px;text-align:center;}
+.navitem:hover{background:var(--panel2);color:var(--text);}
+.navitem.active{background:rgba(255,138,30,.12);color:var(--accent2);border-color:rgba(255,138,30,.3);}
+.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);}
+.userchip{font-size:12.5px;color:var(--muted);padding:0 8px 8px;word-break:break-all;}
+
+.main{flex:1;min-width:0;padding:22px 26px 60px;max-width:1300px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:12px;flex-wrap:wrap;}
+.topbar h2{font-size:22px;margin:0;font-weight:800;}
+.topbar .sub{color:var(--muted);font-size:13.5px;margin-top:2px;}
+
+.mobile-topbar{display:none;position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--border);
+  padding:12px 14px;align-items:center;justify-content:space-between;}
+.hamburger{background:none;border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);}
+
+/* KPI cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.kpi .num{font-size:26px;font-weight:800;}
+.kpi .lbl{color:var(--muted);font-size:12.5px;margin-top:2px;}
+.kpi.acc{border-color:rgba(255,138,30,.4);}
+.kpi.acc .num{color:var(--accent2);}
+
+/* Alerts */
+.alert-item{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--border);
+  border-left:4px solid var(--info);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+.alert-item.crit{border-left-color:var(--danger);}
+.alert-item.warn{border-left-color:var(--warn);}
+.alert-item.pred{border-left-color:var(--info);}
+.alert-item .ic{font-size:18px;}
+.alert-item .txt{flex:1;font-size:13.5px;}
+.alert-item .txt b{display:block;font-size:14px;margin-bottom:2px;}
+
+/* Panels / sections */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+.panel-head h3{margin:0;font-size:16px;}
+
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+.search-box{position:relative;flex:1;min-width:180px;}
+.search-box input{width:100%;padding:9px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13.5px;}
+
+/* Table */
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px;}
+thead th{text-align:left;background:var(--panel2);color:var(--muted);font-weight:600;font-size:12px;
+  text-transform:uppercase;letter-spacing:.03em;padding:10px 12px;white-space:nowrap;}
+tbody td{padding:11px 12px;border-top:1px solid var(--border);vertical-align:middle;}
+tbody tr:hover{background:rgba(255,255,255,.02);}
+.actions-cell{display:flex;gap:6px;}
+.icon-btn{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:6px 9px;color:var(--text);font-size:13px;}
+.icon-btn:hover{border-color:var(--accent);}
+.icon-btn.danger:hover{border-color:var(--danger);color:#ffb4b4;}
+.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;letter-spacing:.02em;}
+.pill.green{background:rgba(34,197,94,.15);color:#5fe08a;}
+.pill.orange{background:rgba(255,138,30,.15);color:var(--accent2);}
+.pill.red{background:rgba(239,68,68,.15);color:#ff8a8a;}
+.pill.gray{background:rgba(142,160,184,.15);color:var(--muted);}
+.pill.blue{background:rgba(59,158,255,.15);color:#7cbcff;}
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty-state .big{font-size:34px;margin-bottom:8px;}
+
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(4,6,10,.72);display:flex;align-items:flex-start;
+  justify-content:center;padding:26px 14px;z-index:100;overflow-y:auto;}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:540px;margin:auto;}
+.modal h3{margin:0 0 4px;font-size:18px;}
+.modal .modal-sub{color:var(--muted);font-size:13px;margin-bottom:16px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
+.form-grid .span2{grid-column:1/-1;}
+@media(max-width:520px){.form-grid{grid-template-columns:1fr;}}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+
+.photo-thumb{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border);}
+.photo-strip{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.photo-strip .ph-wrap{position:relative;}
+.photo-strip .rm{position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;border:none;
+  border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;}
+.capture-row{display:flex;gap:8px;flex-wrap:wrap;}
+.capture-row label.btn{background:var(--panel2);color:var(--text);border:1px dashed var(--border);}
+
+/* Parts-in-repair mini table */
+.mini-add-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.mini-list{border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:6px;}
+.mini-list .mi{display:flex;justify-content:space-between;padding:8px 10px;font-size:13px;border-top:1px solid var(--border);}
+.mini-list .mi:first-child{border-top:none;}
+
+/* Toast */
+#toast-wrap{position:fixed;bottom:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--panel2);border:1px solid var(--border);border-left:4px solid var(--accent);
+  padding:11px 16px;border-radius:9px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:320px;animation:toastIn .2s ease;}
+.toast.err{border-left-color:var(--danger);}
+.toast.ok{border-left-color:var(--safe);}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* Import/export */
+.io-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+.io-card{border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--panel2);}
+.io-card h4{margin:0 0 4px;font-size:14px;}
+.io-card p{margin:0 0 12px;color:var(--muted);font-size:12.5px;}
+.io-card .row{gap:8px;}
+input[type=file]{color:var(--muted);font-size:12.5px;}
+
+@media(max-width:880px){
+  .sidebar{position:fixed;left:0;top:0;z-index:50;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.5);}
+  .sidebar.open{transform:translateX(0);}
+  .mobile-topbar{display:flex;}
+  .main{padding:16px 14px 60px;}
+  #app{display:block;}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== SETUP SCREEN (clés Supabase non configurées) ===================== -->
+<div id="setupScreen" class="screen-center hidden">
+  <div class="card" style="max-width:560px;">
+    <div class="logo" style="margin-bottom:14px;">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#ff8a1e"/><path d="M6 20L10 12H16L20 20" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="22.5" r="2.3" fill="#0b0f14"/><circle cx="18.5" cy="22.5" r="2.3" fill="#0b0f14"/><path d="M20 20H24.5L26 16" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Flotte<b>Mine</b> Pro</span>
+    </div>
+    <h1>Configuration requise</h1>
+    <p class="sub">Avant d'utiliser l'application, connectez-la à votre projet Supabase.</p>
+    <div class="error-msg">
+      Les clés Supabase n'ont pas encore été renseignées dans le fichier <code>index.html</code>.
+    </div>
+    <ol style="font-size:13.5px;color:var(--muted);line-height:1.7;padding-left:20px;margin:0 0 18px;">
+      <li>Ouvrez votre projet sur <code>supabase.com</code></li>
+      <li>Allez dans <code>Project Settings → API</code></li>
+      <li>Copiez <b>Project URL</b> et la clé <b>anon / public</b></li>
+      <li>Dans <code>index.html</code>, remplacez <code>SUPABASE_URL</code> et <code>SUPABASE_ANON_KEY</code> tout en haut du script</li>
+      <li>Re-uploadez le fichier sur GitHub</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ===================== AUTH SCREEN ===================== -->
+<div id="authScreen" class="screen-center hidden">
+  <div class="card">
+    <div class="logo" style="margin-bottom:18px;">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#ff8a1e"/><path d="M6 20L10 12H16L20 20" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="22.5" r="2.3" fill="#0b0f14"/><circle cx="18.5" cy="22.5" r="2.3" fill="#0b0f14"/><path d="M20 20H24.5L26 16" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Flotte<b>Mine</b> Pro</span>
+    </div>
+    <h1 id="authTitle">Connexion</h1>
+    <p class="sub" id="authSub">Gestion de flotte, chauffeurs, stock et maintenance</p>
+    <div id="authMsg"></div>
+    <div class="field"><label>Adresse e-mail</label><input id="authEmail" type="email" placeholder="vous@exemple.com" autocomplete="username"></div>
+    <div class="field"><label>Mot de passe</label><input id="authPass" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="btn full" id="authSubmitBtn" onclick="handleAuthSubmit()">Se connecter</button>
+    <p style="text-align:center;margin-top:16px;font-size:13.5px;color:var(--muted);">
+      <span id="authSwitchLabel">Pas encore de compte ?</span>
+      <button class="link-btn" id="authSwitchBtn" onclick="toggleAuthMode()">Créer un compte</button>
+    </p>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" class="hidden">
+  <div class="overlay hidden" id="overlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#ff8a1e"/><path d="M6 20L10 12H16L20 20" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="22.5" r="2.3" fill="#0b0f14"/><circle cx="18.5" cy="22.5" r="2.3" fill="#0b0f14"/><path d="M20 20H24.5L26 16" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Flotte<b>Mine</b></span>
+    </div>
+    <nav id="navList"></nav>
+    <div class="sidebar-footer">
+      <div class="userchip" id="userChip"></div>
+      <button class="btn secondary full sm" onclick="handleLogout()">Déconnexion</button>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;">
+    <div class="mobile-topbar">
+      <button class="hamburger" onclick="openSidebar()">☰</button>
+      <div class="logo" style="font-size:15px;"><span>Flotte<b>Mine</b></span></div>
+      <span style="width:38px;"></span>
+    </div>
+    <main class="main" id="mainContent"></main>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toast-wrap"></div>
+
+<script>
+/* ============================================================================
+   CONFIGURATION — Remplacez ces deux valeurs par celles de votre projet
+   Supabase (Project Settings → API)
+   ============================================================================ */
+const SUPABASE_URL = "https://pgoesbhdbmnjscmvsflv.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnb2VzYmhkYm1uanNjbXZzZmx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyNTgzOTMsImV4cCI6MjEwNDgzNDM5M30.5vZ_99CsSE5r-1j2bZhGvrO76tfmfNac-HbbOxNb1ig";
+
+/* ============================================================================ */
+
+let supa = null;
+let currentUser = null;
+let authMode = "login";
+let activeTab = "dashboard";
+
+// Caches locales (rechargées à chaque changement)
+let CACHE = { vehicles: [], drivers: [], parts: [], vidanges: [], repairs: [], repair_parts: [], km_logs: [] };
+let searchTerm = "";
+
+/* ---------------------------------------------------------------------------
+   Définitions génériques des entités (pilotent formulaires + tableaux + CSV)
+--------------------------------------------------------------------------- */
+const ENTITIES = {
+  vehicles: {
+    label: "Véhicules", table: "vehicles", icon: "🚚", order: "plaque",
+    fields: [
+      { key: "plaque", label: "Plaque d'immatriculation", type: "text", required: true },
+      { key: "marque", label: "Marque", type: "text" },
+      { key: "modele", label: "Modèle", type: "text" },
+      { key: "annee", label: "Année", type: "number" },
+      { key: "type_vehicule", label: "Type", type: "select", options: ["Benne","Pickup","Bus","Citerne","Chargeuse","Niveleuse","Autre"] },
+      { key: "statut", label: "Statut", type: "select", options: ["Actif","En panne","En maintenance","Hors service"] },
+      { key: "km_actuel", label: "Kilométrage actuel", type: "number" },
+      { key: "km_dernier_vidange", label: "Km dernière vidange", type: "number" },
+      { key: "date_dernier_vidange", label: "Date dernière vidange", type: "date" },
+      { key: "intervalle_vidange_km", label: "Intervalle vidange (km)", type: "number" },
+      { key: "intervalle_vidange_jours", label: "Intervalle vidange (jours)", type: "number" },
+      { key: "chauffeur_assigne_id", label: "Chauffeur assigné", type: "ref", ref: "drivers", labelFn: d => `${d.prenom||""} ${d.nom}`.trim() },
+      { key: "notes", label: "Notes", type: "textarea", span2: true },
+    ],
+    listColumns: ["plaque","marque_modele","type_vehicule","statut","km_actuel","chauffeur"],
+  },
+  drivers: {
+    label: "Chauffeurs", table: "drivers", icon: "🧑‍✈️", order: "nom",
+    fields: [
+      { key: "nom", label: "Nom", type: "text", required: true },
+      { key: "prenom", label: "Prénom", type: "text" },
+      { key: "telephone", label: "Téléphone", type: "text" },
+      { key: "numero_permis", label: "N° de permis", type: "text" },
+      { key: "categorie_permis", label: "Catégorie de permis", type: "text" },
+      { key: "date_expiration_permis", label: "Expiration du permis", type: "date" },
+      { key: "statut", label: "Statut", type: "select", options: ["Actif","Congé","Suspendu","Inactif"] },
+      { key: "date_embauche", label: "Date d'embauche", type: "date" },
+      { key: "notes", label: "Notes", type: "textarea", span2: true },
+    ],
+    listColumns: ["nom_prenom","telephone","numero_permis","date_expiration_permis","statut"],
+  },
+  parts: {
+    label: "Stock pièces", table: "parts", icon: "🧰", order: "nom",
+    fields: [
+      { key: "nom", label: "Nom de la pièce", type: "text", required: true },
+      { key: "reference", label: "Référence", type: "text" },
+      { key: "categorie", label: "Catégorie", type: "select", options: ["Filtre","Huile","Pneu","Frein","Moteur","Électrique","Autre"] },
+      { key: "quantite_stock", label: "Quantité en stock", type: "number" },
+      { key: "quantite_min", label: "Seuil d'alerte (min)", type: "number" },
+      { key: "unite", label: "Unité", type: "text" },
+      { key: "prix_unitaire", label: "Prix unitaire (FCFA)", type: "number" },
+      { key: "fournisseur", label: "Fournisseur", type: "text" },
+      { key: "emplacement", label: "Emplacement", type: "text" },
+    ],
+    listColumns: ["nom","reference","categorie","quantite_stock","quantite_min","prix_unitaire"],
+  },
+  vidanges: {
+    label: "Vidanges", table: "vidanges", icon: "🛢️", order: "date_vidange", orderDesc: true,
+    fields: [
+      { key: "vehicule_id", label: "Véhicule", type: "ref", ref: "vehicles", labelFn: v => v.plaque, required: true },
+      { key: "date_vidange", label: "Date de la vidange", type: "date", required: true },
+      { key: "km_vidange", label: "Kilométrage à la vidange", type: "number", required: true },
+      { key: "type_huile", label: "Type d'huile", type: "text" },
+      { key: "filtre_change", label: "Filtre changé", type: "checkbox" },
+      { key: "cout", label: "Coût (FCFA)", type: "number" },
+      { key: "effectue_par", label: "Effectué par", type: "text" },
+      { key: "notes", label: "Notes", type: "textarea", span2: true },
+    ],
+    listColumns: ["vehicule","date_vidange","km_vidange","type_huile","cout"],
+  },
+};
+
+function fmtNum(n){ if(n===null||n===undefined||n==="") return "—"; return Number(n).toLocaleString("fr-FR"); }
+function fmtDate(d){ if(!d) return "—"; try{ return new Date(d).toLocaleDateString("fr-FR"); }catch(e){ return d; } }
+function daysBetween(a,b){ return Math.round((new Date(b) - new Date(a)) / 86400000); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function uid(){ return 'x'+Math.random().toString(36).slice(2,10); }
+
+/* ---------------------------------------------------------------------------
+   Toasts
+--------------------------------------------------------------------------- */
+function toast(msg, type){
+  const wrap = document.getElementById("toast-wrap");
+  const el = document.createElement("div");
+  el.className = "toast" + (type ? " " + type : "");
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 4200);
+}
+
+/* ---------------------------------------------------------------------------
+   Init
+--------------------------------------------------------------------------- */
+window.addEventListener("DOMContentLoaded", init);
+
+async function init(){
+  if(!SUPABASE_URL || SUPABASE_URL.includes("VOTRE-PROJET") || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("VOTRE_CLE")){
+    document.getElementById("setupScreen").classList.remove("hidden");
+    return;
+  }
+  supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const { data: { session } } = await supa.auth.getSession();
+  if(session && session.user){
+    currentUser = session.user;
+    await showApp();
+  } else {
+    document.getElementById("authScreen").classList.remove("hidden");
+  }
+
+  supa.auth.onAuthStateChange((event, session) => {
+    if(event === "SIGNED_IN" && session){
+      currentUser = session.user;
+    }
+    if(event === "SIGNED_OUT"){
+      currentUser = null;
+      document.getElementById("app").classList.add("hidden");
+      document.getElementById("authScreen").classList.remove("hidden");
+    }
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   Auth
+--------------------------------------------------------------------------- */
+function toggleAuthMode(){
+  authMode = authMode === "login" ? "signup" : "login";
+  document.getElementById("authTitle").textContent = authMode === "login" ? "Connexion" : "Créer un compte";
+  document.getElementById("authSubmitBtn").textContent = authMode === "login" ? "Se connecter" : "Créer mon compte";
+  document.getElementById("authSwitchLabel").textContent = authMode === "login" ? "Pas encore de compte ?" : "Déjà inscrit ?";
+  document.getElementById("authSwitchBtn").textContent = authMode === "login" ? "Créer un compte" : "Se connecter";
+  document.getElementById("authMsg").innerHTML = "";
+}
+
+async function handleAuthSubmit(){
+  const email = document.getElementById("authEmail").value.trim();
+  const pass = document.getElementById("authPass").value;
+  const msgEl = document.getElementById("authMsg");
+  msgEl.innerHTML = "";
+  if(!email || !pass){ msgEl.innerHTML = `<div class="error-msg">Veuillez remplir tous les champs.</div>`; return; }
+
+  try{
+    if(authMode === "login"){
+      const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+      if(error) throw error;
+      currentUser = data.user;
+      await showApp();
+    } else {
+      const { data, error } = await supa.auth.signUp({ email, password: pass });
+      if(error) throw error;
+      if(data.session){
+        currentUser = data.user;
+        await showApp();
+      } else {
+        msgEl.innerHTML = `<div class="ok-msg">Compte créé. Vérifiez votre e-mail si une confirmation est requise, puis connectez-vous.</div>`;
+        toggleAuthMode();
+      }
+    }
+  }catch(err){
+    msgEl.innerHTML = `<div class="error-msg">${err.message || "Une erreur est survenue."}</div>`;
+  }
+}
+
+async function handleLogout(){
+  await supa.auth.signOut();
+}
+
+/* ---------------------------------------------------------------------------
+   App shell / navigation
+--------------------------------------------------------------------------- */
+const NAV = [
+  { key: "dashboard", label: "Tableau de bord", icon: "📊" },
+  { key: "vehicles", label: "Véhicules", icon: "🚚" },
+  { key: "drivers", label: "Chauffeurs", icon: "🧑‍✈️" },
+  { key: "parts", label: "Stock pièces", icon: "🧰" },
+  { key: "vidanges", label: "Vidanges", icon: "🛢️" },
+  { key: "repairs", label: "Réparations", icon: "🔧" },
+  { key: "alerts", label: "Alertes & prédictif", icon: "🔔" },
+  { key: "io", label: "Import / Export", icon: "🔄" },
+];
+
+async function showApp(){
+  document.getElementById("authScreen").classList.add("hidden");
+  document.getElementById("setupScreen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("userChip").textContent = currentUser.email;
+  renderNav();
+  await reloadAllData();
+  goTab("dashboard");
+}
+
+function renderNav(){
+  const insights = computeInsights();
+  const navList = document.getElementById("navList");
+  navList.innerHTML = NAV.map(n => {
+    let badge = "";
+    if(n.key === "alerts" && insights.alerts.length){
+      badge = `<span class="badge">${insights.alerts.length}</span>`;
+    }
+    return `<a href="#" class="navitem ${activeTab===n.key?'active':''}" onclick="goTab('${n.key}');return false;">
+      <span>${n.icon}</span><span>${n.label}</span>${badge}
+    </a>`;
+  }).join("");
+}
+
+function openSidebar(){ document.getElementById("sidebar").classList.add("open"); document.getElementById("overlay").classList.remove("hidden"); }
+function closeSidebar(){ document.getElementById("sidebar").classList.remove("open"); document.getElementById("overlay").classList.add("hidden"); }
+
+function goTab(key){
+  activeTab = key;
+  closeSidebar();
+  renderNav();
+  renderMain();
+}
+
+async function reloadAllData(){
+  try{
+    const [v, d, p, vi, r, rp, kl] = await Promise.all([
+      supa.from("vehicles").select("*").order("plaque"),
+      supa.from("drivers").select("*").order("nom"),
+      supa.from("parts").select("*").order("nom"),
+      supa.from("vidanges").select("*").order("date_vidange", { ascending: false }),
+      supa.from("repairs").select("*").order("date_signalement", { ascending: false }),
+      supa.from("repair_parts").select("*"),
+      supa.from("km_logs").select("*").order("date_releve", { ascending: false }),
+    ]);
+    CACHE.vehicles = v.data || [];
+    CACHE.drivers = d.data || [];
+    CACHE.parts = p.data || [];
+    CACHE.vidanges = vi.data || [];
+    CACHE.repairs = r.data || [];
+    CACHE.repair_parts = rp.data || [];
+    CACHE.km_logs = kl.data || [];
+  }catch(err){
+    toast("Erreur de chargement : " + err.message, "err");
+  }
+  renderNav();
+}
+
+function renderMain(){
+  const main = document.getElementById("mainContent");
+  if(activeTab === "dashboard") return renderDashboard(main);
+  if(activeTab === "alerts") return renderAlertsPage(main);
+  if(activeTab === "io") return renderIOPage(main);
+  if(activeTab === "repairs") return renderRepairsPage(main);
+  if(ENTITIES[activeTab]) return renderEntityPage(main, activeTab);
+}
+
+/* ---------------------------------------------------------------------------
+   DASHBOARD
+--------------------------------------------------------------------------- */
+function renderDashboard(main){
+  const ins = computeInsights();
+  const nbActifs = CACHE.vehicles.filter(v => v.statut === "Actif").length;
+  const nbPanne = CACHE.vehicles.filter(v => v.statut === "En panne").length;
+  const nbRepEnCours = CACHE.repairs.filter(r => r.statut !== "Terminée" && r.statut !== "Annulée").length;
+  const valStock = CACHE.parts.reduce((s,p)=> s + (Number(p.quantite_stock||0) * Number(p.prix_unitaire||0)), 0);
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div><h2>Tableau de bord</h2><div class="sub">Vue d'ensemble de votre flotte</div></div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="num">${CACHE.vehicles.length}</div><div class="lbl">Véhicules (${nbActifs} actifs)</div></div>
+      <div class="kpi"><div class="num">${CACHE.drivers.length}</div><div class="lbl">Chauffeurs</div></div>
+      <div class="kpi ${nbPanne?'acc':''}"><div class="num">${nbPanne}</div><div class="lbl">Véhicules en panne</div></div>
+      <div class="kpi ${nbRepEnCours?'acc':''}"><div class="num">${nbRepEnCours}</div><div class="lbl">Réparations en cours</div></div>
+      <div class="kpi"><div class="num">${CACHE.parts.length}</div><div class="lbl">Références en stock</div></div>
+      <div class="kpi"><div class="num">${fmtNum(Math.round(valStock))}</div><div class="lbl">Valeur du stock (FCFA)</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>🔔 Alertes prioritaires</h3><button class="btn secondary sm" onclick="goTab('alerts')">Voir tout</button></div>
+      ${ins.alerts.slice(0,5).map(a => alertHTML(a)).join("") || `<div class="empty-state"><div class="big">✅</div>Aucune alerte active. Tout va bien.</div>`}
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>🔧 Réparations récentes</h3><button class="btn secondary sm" onclick="goTab('repairs')">Voir tout</button></div>
+      ${renderRepairsMiniTable(CACHE.repairs.slice(0,5))}
+    </div>
+  `;
+}
+
+function alertHTML(a){
+  const cls = a.level === "critique" ? "crit" : (a.level === "attention" ? "warn" : "pred");
+  const ic = a.level === "critique" ? "🚨" : (a.level === "attention" ? "⚠️" : "📈");
+  return `<div class="alert-item ${cls}"><div class="ic">${ic}</div><div class="txt"><b>${a.title}</b>${a.detail}</div></div>`;
+}
+
+function renderRepairsMiniTable(list){
+  if(!list.length) return `<div class="empty-state"><div class="big">🔧</div>Aucune réparation enregistrée.</div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Véhicule</th><th>Type</th><th>Priorité</th><th>Statut</th><th>Signalée le</th></tr></thead><tbody>
+    ${list.map(r => {
+      const veh = CACHE.vehicles.find(v=>v.id===r.vehicule_id);
+      return `<tr><td>${veh?veh.plaque:'—'}</td><td>${r.type_panne||'—'}</td><td>${priorityPill(r.priorite)}</td><td>${statusPill(r.statut)}</td><td>${fmtDate(r.date_signalement)}</td></tr>`;
+    }).join("")}
+  </tbody></table></div>`;
+}
+
+/* ---------------------------------------------------------------------------
+   ALERTES & PRÉDICTIF (le coeur intelligent de l'appli)
+--------------------------------------------------------------------------- */
+function avgKmPerDay(vehicleId){
+  const logs = CACHE.km_logs.filter(l => l.vehicule_id === vehicleId)
+    .sort((a,b)=> new Date(a.date_releve) - new Date(b.date_releve));
+  if(logs.length < 2) return null;
+  const first = logs[0], last = logs[logs.length-1];
+  const days = Math.max(1, daysBetween(first.date_releve, last.date_releve));
+  const kmDiff = Number(last.km) - Number(first.km);
+  if(kmDiff <= 0) return null;
+  return kmDiff / days;
+}
+
+function partsConsumptionPerDay(partId){
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-90);
+  const relevant = CACHE.repair_parts.filter(rp => rp.part_id === partId && new Date(rp.created_at) >= cutoff);
+  if(!relevant.length) return null;
+  const totalQty = relevant.reduce((s,rp)=> s + Number(rp.quantite||0), 0);
+  return totalQty / 90;
+}
+
+function computeInsights(){
+  const alerts = [];
+
+  // 1. Vidanges — dépassées ou proches (par km et par date)
+  CACHE.vehicles.forEach(v => {
+    const kmProchaine = Number(v.km_dernier_vidange||0) + Number(v.intervalle_vidange_km||5000);
+    const kmRestant = kmProchaine - Number(v.km_actuel||0);
+    let dateProchaine = null;
+    if(v.date_dernier_vidange){
+      dateProchaine = new Date(v.date_dernier_vidange);
+      dateProchaine.setDate(dateProchaine.getDate() + Number(v.intervalle_vidange_jours||90));
+    }
+    const joursRestants = dateProchaine ? daysBetween(todayISO(), dateProchaine.toISOString().slice(0,10)) : null;
+
+    if(kmRestant <= 0 || (joursRestants !== null && joursRestants <= 0)){
+      alerts.push({ level:"critique", key:`vid-${v.id}`,
+        title:`Vidange dépassée — ${v.plaque}`,
+        detail:`Km restant : ${fmtNum(kmRestant)} · ${joursRestants!==null?`dépassée depuis ${Math.abs(joursRestants)} j`:''}` });
+    } else if(kmRestant <= 500 || (joursRestants !== null && joursRestants <= 7)){
+      alerts.push({ level:"attention", key:`vid2-${v.id}`,
+        title:`Vidange bientôt due — ${v.plaque}`,
+        detail:`Encore ${fmtNum(kmRestant)} km${joursRestants!==null?` ou ${joursRestants} j`:''}` });
+    }
+
+    // Prédictif : estimation de la date atteinte selon le rythme d'usage réel
+    const rate = avgKmPerDay(v.id);
+    if(rate && kmRestant > 0){
+      const joursPred = Math.round(kmRestant / rate);
+      if(joursPred <= 14){
+        const d = new Date(); d.setDate(d.getDate()+joursPred);
+        alerts.push({ level:"predictif", key:`predvid-${v.id}`,
+          title:`Prévision vidange — ${v.plaque}`,
+          detail:`Au rythme actuel (~${Math.round(rate)} km/j), vidange requise vers le ${fmtDate(d)}` });
+      }
+    }
+  });
+
+  // 2. Stock de pièces — sous le seuil, ou rupture prédite
+  CACHE.parts.forEach(p => {
+    if(Number(p.quantite_stock) <= Number(p.quantite_min||0)){
+      alerts.push({ level:"critique", key:`stock-${p.id}`,
+        title:`Stock faible — ${p.nom}`,
+        detail:`${fmtNum(p.quantite_stock)} ${p.unite||'unité'}(s) restant(es), seuil : ${fmtNum(p.quantite_min)}` });
+    }
+    const rate = partsConsumptionPerDay(p.id);
+    if(rate){
+      const joursAvantRupture = Math.round(Number(p.quantite_stock) / rate);
+      if(joursAvantRupture <= 15 && Number(p.quantite_stock) > Number(p.quantite_min||0)){
+        alerts.push({ level:"predictif", key:`predstock-${p.id}`,
+          title:`Rupture de stock prévue — ${p.nom}`,
+          detail:`Consommation moyenne récente : rupture estimée dans ${joursAvantRupture} j` });
+      }
+    }
+  });
+
+  // 3. Permis chauffeurs — expiration proche
+  CACHE.drivers.forEach(d => {
+    if(!d.date_expiration_permis) return;
+    const j = daysBetween(todayISO(), d.date_expiration_permis);
+    if(j <= 0){
+      alerts.push({ level:"critique", key:`permis-${d.id}`, title:`Permis expiré — ${d.prenom||''} ${d.nom}`,
+        detail:`Expiré depuis ${Math.abs(j)} j` });
+    } else if(j <= 30){
+      alerts.push({ level:"attention", key:`permis2-${d.id}`, title:`Permis bientôt expiré — ${d.prenom||''} ${d.nom}`,
+        detail:`Expire dans ${j} j (le ${fmtDate(d.date_expiration_permis)})` });
+    }
+  });
+
+  // 4. Réparations urgentes non traitées
+  CACHE.repairs.forEach(r => {
+    if(r.statut === "Terminée" || r.statut === "Annulée") return;
+    const veh = CACHE.vehicles.find(v=>v.id===r.vehicule_id);
+    if(r.priorite === "Urgente"){
+      alerts.push({ level:"critique", key:`rep-${r.id}`,
+        title:`Panne urgente en attente — ${veh?veh.plaque:''}`,
+        detail:`${r.type_panne||'Panne'} · signalée le ${fmtDate(r.date_signalement)}` });
+    } else {
+      const j = daysBetween(r.date_signalement, todayISO());
+      if(j >= 5){
+        alerts.push({ level:"attention", key:`rep2-${r.id}`,
+          title:`Réparation en attente depuis ${j} j — ${veh?veh.plaque:''}`,
+          detail:`${r.type_panne||'Panne'} · priorité ${r.priorite||'Normale'}` });
+      }
+    }
+  });
+
+  const order = { critique:0, attention:1, predictif:2 };
+  alerts.sort((a,b)=> order[a.level]-order[b.level]);
+  return { alerts };
+}
+
+function renderAlertsPage(main){
+  const ins = computeInsights();
+  const crit = ins.alerts.filter(a=>a.level==="critique");
+  const warn = ins.alerts.filter(a=>a.level==="attention");
+  const pred = ins.alerts.filter(a=>a.level==="predictif");
+  main.innerHTML = `
+    <div class="topbar"><div><h2>Alertes & maintenance prédictive</h2>
+      <div class="sub">Calculées automatiquement à partir de l'historique de kilométrage, du stock et des échéances</div></div>
+      <button class="btn secondary" onclick="reloadAllData().then(()=>renderMain())">🔄 Actualiser</button>
+    </div>
+    <div class="panel"><div class="panel-head"><h3>🚨 Critique (${crit.length})</h3></div>
+      ${crit.map(a=>alertHTML(a)).join("") || `<div class="empty-state">Aucune alerte critique.</div>`}</div>
+    <div class="panel"><div class="panel-head"><h3>⚠️ À surveiller (${warn.length})</h3></div>
+      ${warn.map(a=>alertHTML(a)).join("") || `<div class="empty-state">Rien à signaler.</div>`}</div>
+    <div class="panel"><div class="panel-head"><h3>📈 Prédictions (${pred.length})</h3></div>
+      <p class="muted" style="font-size:12.5px;margin-top:-6px;">Basées sur le rythme d'usage réel (km parcourus / jour, consommation de pièces sur 90 jours).</p>
+      ${pred.map(a=>alertHTML(a)).join("") || `<div class="empty-state">Pas assez de données pour prédire (ajoutez des relevés km / vidanges / réparations).</div>`}</div>
+  `;
+}
+
+/* ---------------------------------------------------------------------------
+   Pills
+--------------------------------------------------------------------------- */
+function statusPill(s){
+  const map = { "Actif":"green","En panne":"red","En maintenance":"orange","Hors service":"gray",
+    "Signalée":"orange","En cours":"blue","Terminée":"green","Annulée":"gray",
+    "Congé":"gray","Suspendu":"red","Inactif":"gray" };
+  return `<span class="pill ${map[s]||'gray'}">${s||'—'}</span>`;
+}
+function priorityPill(p){
+  const map = { "Basse":"gray","Normale":"blue","Haute":"orange","Urgente":"red" };
+  return `<span class="pill ${map[p]||'gray'}">${p||'—'}</span>`;
+}
+
+/* ---------------------------------------------------------------------------
+   GENERIC ENTITY PAGES (Véhicules / Chauffeurs / Stock / Vidanges)
+--------------------------------------------------------------------------- */
+function renderEntityPage(main, key){
+  const def = ENTITIES[key];
+  let rows = CACHE[key] || [];
+  if(searchTerm){
+    const t = searchTerm.toLowerCase();
+    rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(t));
+  }
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div><h2>${def.icon} ${def.label}</h2><div class="sub">${rows.length} enregistrement(s)</div></div>
+      <button class="btn" onclick="openEntityForm('${key}')">+ Ajouter</button>
+    </div>
+    <div class="toolbar">
+      <div class="search-box"><input placeholder="Rechercher..." value="${searchTerm}" oninput="searchTerm=this.value;renderMain();"></div>
+      <button class="btn secondary sm" onclick="exportCSV('${key}')">⬇ Exporter CSV</button>
+    </div>
+    <div class="panel" style="padding:0;">
+      ${rows.length ? renderEntityTable(key, rows) : `<div class="empty-state"><div class="big">${def.icon}</div>Aucun enregistrement. Cliquez sur "+ Ajouter" pour commencer.</div>`}
+    </div>
+  `;
+}
+
+function refLabel(field, id){
+  if(!id) return "—";
+  const list = CACHE[field.ref] || [];
+  const item = list.find(x=>x.id===id);
+  return item ? field.labelFn(item) : "—";
+}
+
+function renderEntityTable(key, rows){
+  const def = ENTITIES[key];
+  let head, bodyFn;
+
+  if(key === "vehicles"){
+    head = ["Plaque","Marque / Modèle","Type","Statut","Km actuel","Chauffeur",""];
+    bodyFn = v => [v.plaque, `${v.marque||''} ${v.modele||''}`.trim()||'—', v.type_vehicule||'—', statusPill(v.statut), fmtNum(v.km_actuel), refLabel({ref:'drivers',labelFn:d=>`${d.prenom||''} ${d.nom}`.trim()}, v.chauffeur_assigne_id)];
+  } else if(key === "drivers"){
+    head = ["Nom","Téléphone","N° Permis","Expiration permis","Statut",""];
+    bodyFn = d => [`${d.prenom||''} ${d.nom}`.trim(), d.telephone||'—', d.numero_permis||'—', fmtDate(d.date_expiration_permis), statusPill(d.statut)];
+  } else if(key === "parts"){
+    head = ["Nom","Référence","Catégorie","Stock","Seuil min","Prix unitaire",""];
+    bodyFn = p => [p.nom, p.reference||'—', p.categorie||'—', `<b style="${Number(p.quantite_stock)<=Number(p.quantite_min||0)?'color:var(--danger)':''}">${fmtNum(p.quantite_stock)} ${p.unite||''}</b>`, fmtNum(p.quantite_min), fmtNum(p.prix_unitaire)+" F"];
+  } else if(key === "vidanges"){
+    head = ["Véhicule","Date","Km","Type d'huile","Coût",""];
+    bodyFn = vi => {
+      const veh = CACHE.vehicles.find(v=>v.id===vi.vehicule_id);
+      return [veh?veh.plaque:'—', fmtDate(vi.date_vidange), fmtNum(vi.km_vidange), vi.type_huile||'—', fmtNum(vi.cout)+" F"];
+    };
+  }
+
+  return `<div class="table-wrap"><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>
+    ${rows.map(r => {
+      const cells = bodyFn(r);
+      return `<tr>${cells.map(c=>`<td>${c}</td>`).join("")}<td class="actions-cell">
+        <button class="icon-btn" onclick="openEntityForm('${key}','${r.id}')">✏️</button>
+        <button class="icon-btn danger" onclick="deleteRow('${key}','${r.id}')">🗑️</button>
+      </td></tr>`;
+    }).join("")}
+  </tbody></table></div>`;
+}
+
+function openEntityForm(key, id){
+  const def = ENTITIES[key];
+  const row = id ? CACHE[key].find(r=>r.id===id) : {};
+  const fieldsHTML = def.fields.map(f => {
+    const val = row[f.key] ?? "";
+    if(f.type === "select"){
+      return `<div class="field ${f.span2?'span2':''}"><label>${f.label}${f.required?' *':''}</label>
+        <select id="f_${f.key}">${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join("")}</select></div>`;
+    }
+    if(f.type === "ref"){
+      const list = CACHE[f.ref] || [];
+      return `<div class="field ${f.span2?'span2':''}"><label>${f.label}${f.required?' *':''}</label>
+        <select id="f_${f.key}"><option value="">— Aucun —</option>${list.map(item=>`<option value="${item.id}" ${val===item.id?'selected':''}>${f.labelFn(item)}</option>`).join("")}</select></div>`;
+    }
+    if(f.type === "textarea"){
+      return `<div class="field ${f.span2?'span2':''}"><label>${f.label}</label><textarea id="f_${f.key}">${val}</textarea></div>`;
+    }
+    if(f.type === "checkbox"){
+      return `<div class="field ${f.span2?'span2':''}"><label>${f.label}</label>
+        <select id="f_${f.key}"><option value="true" ${val?'selected':''}>Oui</option><option value="false" ${!val?'selected':''}>Non</option></select></div>`;
+    }
+    return `<div class="field ${f.span2?'span2':''}"><label>${f.label}${f.required?' *':''}</label>
+      <input id="f_${f.key}" type="${f.type}" value="${val}"></div>`;
+  }).join("");
+
+  showModal(`
+    <h3>${id?'Modifier':'Ajouter'} — ${def.label}</h3>
+    <div class="modal-sub">${id?'Mettez à jour les informations puis enregistrez.':'Renseignez les informations puis enregistrez.'}</div>
+    <div class="form-grid">${fieldsHTML}</div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn" onclick="saveEntityForm('${key}', ${id?`'${id}'`:null})">Enregistrer</button>
+    </div>
+  `);
+}
+
+async function saveEntityForm(key, id){
+  const def = ENTITIES[key];
+  const payload = {};
+  for(const f of def.fields){
+    const el = document.getElementById(`f_${f.key}`);
+    let v = el.value;
+    if(f.required && !v){ toast(`Le champ "${f.label}" est requis.`, "err"); return; }
+    if(f.type === "number") v = v === "" ? null : Number(v);
+    if(f.type === "checkbox") v = v === "true";
+    if(f.type === "ref" && v === "") v = null;
+    if((f.type === "date") && v === "") v = null;
+    payload[f.key] = v;
+  }
+  try{
+    if(id){
+      const { error } = await supa.from(def.table).update(payload).eq("id", id);
+      if(error) throw error;
+      toast("Modifié avec succès.", "ok");
+    } else {
+      const { error } = await supa.from(def.table).insert(payload);
+      if(error) throw error;
+      toast("Ajouté avec succès.", "ok");
+    }
+    closeModal();
+    await reloadAllData();
+    renderMain();
+  }catch(err){
+    toast("Erreur : " + err.message, "err");
+  }
+}
+
+async function deleteRow(key, id){
+  if(!confirm("Confirmer la suppression ? Cette action est irréversible.")) return;
+  const def = ENTITIES[key];
+  try{
+    const { error } = await supa.from(def.table).delete().eq("id", id);
+    if(error) throw error;
+    toast("Supprimé.", "ok");
+    await reloadAllData();
+    renderMain();
+  }catch(err){
+    toast("Erreur : " + err.message, "err");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   RÉPARATIONS (page spécialisée : pièces utilisées + photos de pannes)
+--------------------------------------------------------------------------- */
+let pendingRepairParts = [];
+let pendingRepairPhotos = [];
+
+function renderRepairsPage(main){
+  let rows = CACHE.repairs;
+  if(searchTerm){
+    const t = searchTerm.toLowerCase();
+    rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(t));
+  }
+  main.innerHTML = `
+    <div class="topbar">
+      <div><h2>🔧 Réparations & pannes</h2><div class="sub">${rows.length} enregistrement(s)</div></div>
+      <button class="btn" onclick="openRepairForm()">+ Signaler une panne</button>
+    </div>
+    <div class="toolbar">
+      <div class="search-box"><input placeholder="Rechercher..." value="${searchTerm}" oninput="searchTerm=this.value;renderMain();"></div>
+      <button class="btn secondary sm" onclick="exportRepairsCSV()">⬇ Exporter CSV</button>
+    </div>
+    <div class="panel" style="padding:0;">
+      ${rows.length ? renderRepairsTable(rows) : `<div class="empty-state"><div class="big">🔧</div>Aucune réparation. Cliquez sur "+ Signaler une panne".</div>`}
+    </div>
+  `;
+}
+
+function renderRepairsTable(rows){
+  return `<div class="table-wrap"><table><thead><tr>
+    <th>Véhicule</th><th>Type</th><th>Description</th><th>Priorité</th><th>Statut</th><th>Coût total</th><th>Photos</th><th></th>
+  </tr></thead><tbody>
+    ${rows.map(r => {
+      const veh = CACHE.vehicles.find(v=>v.id===r.vehicule_id);
+      const photos = r.photos || [];
+      return `<tr>
+        <td>${veh?veh.plaque:'—'}</td>
+        <td>${r.type_panne||'—'}</td>
+        <td style="max-width:220px;white-space:normal;">${r.description||'—'}</td>
+        <td>${priorityPill(r.priorite)}</td>
+        <td>${statusPill(r.statut)}</td>
+        <td>${fmtNum(r.cout_total)} F</td>
+        <td>${photos.length ? `${photos.length} 📷` : '—'}</td>
+        <td class="actions-cell">
+          <button class="icon-btn" onclick="openRepairForm('${r.id}')">✏️</button>
+          <button class="icon-btn danger" onclick="deleteRow('repairs','${r.id}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join("")}
+  </tbody></table></div>`;
+}
+
+function openRepairForm(id){
+  const row = id ? CACHE.repairs.find(r=>r.id===id) : null;
+  pendingRepairParts = row ? CACHE.repair_parts.filter(rp=>rp.repair_id===id).map(rp=>({...rp})) : [];
+  pendingRepairPhotos = row ? [...(row.photos||[])] : [];
+
+  const vehOptions = CACHE.vehicles.map(v=>`<option value="${v.id}" ${row&&row.vehicule_id===v.id?'selected':''}>${v.plaque}</option>`).join("");
+  const drvOptions = `<option value="">— Aucun —</option>` + CACHE.drivers.map(d=>`<option value="${d.id}" ${row&&row.chauffeur_id===d.id?'selected':''}>${d.prenom||''} ${d.nom}</option>`).join("");
+  const typeOptions = ["Moteur","Freins","Pneu","Électrique","Carrosserie","Autre"].map(t=>`<option ${row&&row.type_panne===t?'selected':''}>${t}</option>`).join("");
+  const prioOptions = ["Basse","Normale","Haute","Urgente"].map(t=>`<option ${row&&row.priorite===t?'selected':''}>${t}</option>`).join("");
+  const statutOptions = ["Signalée","En cours","Terminée","Annulée"].map(t=>`<option ${row&&row.statut===t?'selected':''}>${t}</option>`).join("");
+
+  showModal(`
+    <h3>${id?'Modifier':'Signaler'} une panne / réparation</h3>
+    <div class="modal-sub">Décrivez la panne, ajoutez des photos et les pièces utilisées.</div>
+    <div class="form-grid">
+      <div class="field"><label>Véhicule *</label><select id="rp_vehicule">${vehOptions}</select></div>
+      <div class="field"><label>Chauffeur concerné</label><select id="rp_chauffeur">${drvOptions}</select></div>
+      <div class="field"><label>Type de panne</label><select id="rp_type">${typeOptions}</select></div>
+      <div class="field"><label>Priorité</label><select id="rp_priorite">${prioOptions}</select></div>
+      <div class="field"><label>Statut</label><select id="rp_statut">${statutOptions}</select></div>
+      <div class="field"><label>Coût main d'œuvre (FCFA)</label><input id="rp_mo" type="number" value="${row?row.cout_main_oeuvre||0:0}"></div>
+      <div class="field span2"><label>Description de la panne</label><textarea id="rp_desc">${row?row.description||'':''}</textarea></div>
+    </div>
+
+    <div class="field span2" style="margin-top:6px;">
+      <label>📷 Photos de la panne (prise directe depuis l'appareil photo du téléphone)</label>
+      <div class="capture-row">
+        <label class="btn sm">＋ Prendre une photo<input type="file" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoCapture(event)"></label>
+        <label class="btn sm">＋ Choisir une image<input type="file" accept="image/*" class="hidden" onchange="handlePhotoCapture(event)"></label>
+      </div>
+      <div class="photo-strip" id="photoStrip"></div>
+    </div>
+
+    <div class="field span2" style="margin-top:6px;">
+      <label>🧰 Pièces utilisées (déduites automatiquement du stock)</label>
+      <div class="mini-add-row">
+        <select id="rp_part_select" style="flex:2;min-width:140px;padding:9px;background:var(--panel2);border:1px solid var(--border);border-radius:9px;color:var(--text);">
+          ${CACHE.parts.map(p=>`<option value="${p.id}" data-price="${p.prix_unitaire}">${p.nom} (stock: ${p.quantite_stock})</option>`).join("")}
+        </select>
+        <input id="rp_part_qty" type="number" value="1" min="1" style="width:70px;padding:9px;background:var(--panel2);border:1px solid var(--border);border-radius:9px;color:var(--text);">
+        <button class="btn secondary sm" onclick="addPendingPart()">Ajouter</button>
+      </div>
+      <div class="mini-list" id="partsMiniList"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn" onclick="saveRepairForm(${id?`'${id}'`:null})">Enregistrer</button>
+    </div>
+  `);
+  renderPhotoStrip();
+  renderPartsMiniList();
+}
+
+function renderPhotoStrip(){
+  const el = document.getElementById("photoStrip");
+  if(!el) return;
+  el.innerHTML = pendingRepairPhotos.map((url,i)=>`<div class="ph-wrap"><img class="photo-thumb" src="${url}"><button class="rm" onclick="removePendingPhoto(${i})">✕</button></div>`).join("");
+}
+function removePendingPhoto(i){ pendingRepairPhotos.splice(i,1); renderPhotoStrip(); }
+
+async function handlePhotoCapture(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  toast("Envoi de la photo...", "");
+  try{
+    const path = `pannes/${Date.now()}_${uid()}.jpg`;
+    const { error } = await supa.storage.from("photos").upload(path, file, { upsert:true, contentType: file.type });
+    if(error) throw error;
+    const { data } = supa.storage.from("photos").getPublicUrl(path);
+    pendingRepairPhotos.push(data.publicUrl);
+    renderPhotoStrip();
+    toast("Photo ajoutée.", "ok");
+  }catch(err){
+    toast("Échec de l'envoi de la photo : " + err.message, "err");
+  }
+  evt.target.value = "";
+}
+
+function addPendingPart(){
+  const sel = document.getElementById("rp_part_select");
+  const qty = Number(document.getElementById("rp_part_qty").value || 1);
+  if(!sel.value){ toast("Aucune pièce disponible à ajouter.", "err"); return; }
+  const part = CACHE.parts.find(p=>p.id===sel.value);
+  pendingRepairParts.push({ part_id: part.id, quantite: qty, prix_unitaire: part.prix_unitaire || 0, _nom: part.nom });
+  renderPartsMiniList();
+}
+function removePendingPart(i){ pendingRepairParts.splice(i,1); renderPartsMiniList(); }
+
+function renderPartsMiniList(){
+  const el = document.getElementById("partsMiniList");
+  if(!el) return;
+  if(!pendingRepairParts.length){ el.innerHTML = `<div class="mi muted">Aucune pièce ajoutée.</div>`; return; }
+  el.innerHTML = pendingRepairParts.map((rp,i)=>{
+    const nom = rp._nom || (CACHE.parts.find(p=>p.id===rp.part_id)||{}).nom || "Pièce";
+    return `<div class="mi"><span>${nom} × ${rp.quantite}</span><span>${fmtNum(rp.quantite*rp.prix_unitaire)} F <button class="link-btn" style="margin-left:8px;color:var(--danger);" onclick="removePendingPart(${i})">✕</button></span></div>`;
+  }).join("");
+}
+
+async function saveRepairForm(id){
+  const vehicule_id = document.getElementById("rp_vehicule").value;
+  if(!vehicule_id){ toast("Veuillez sélectionner un véhicule.", "err"); return; }
+  const payload = {
+    vehicule_id,
+    chauffeur_id: document.getElementById("rp_chauffeur").value || null,
+    type_panne: document.getElementById("rp_type").value,
+    priorite: document.getElementById("rp_priorite").value,
+    statut: document.getElementById("rp_statut").value,
+    cout_main_oeuvre: Number(document.getElementById("rp_mo").value || 0),
+    description: document.getElementById("rp_desc").value,
+    photos: pendingRepairPhotos,
+  };
+  try{
+    let repairId = id;
+    if(id){
+      const { error } = await supa.from("repairs").update(payload).eq("id", id);
+      if(error) throw error;
+      // Remplace les pièces existantes (simple : supprime puis réinsère)
+      await supa.from("repair_parts").delete().eq("repair_id", id);
+    } else {
+      const { data, error } = await supa.from("repairs").insert(payload).select().single();
+      if(error) throw error;
+      repairId = data.id;
+    }
+    if(pendingRepairParts.length){
+      const rows = pendingRepairParts.map(rp => ({ repair_id: repairId, part_id: rp.part_id, quantite: rp.quantite, prix_unitaire: rp.prix_unitaire }));
+      const { error: e2 } = await supa.from("repair_parts").insert(rows);
+      if(e2) throw e2;
+    } else {
+      // recalcule le coût total = main d'oeuvre seule si aucune pièce
+      await supa.from("repairs").update({ cout_total: payload.cout_main_oeuvre }).eq("id", repairId);
+    }
+    toast(id?"Réparation modifiée.":"Panne enregistrée.", "ok");
+    closeModal();
+    await reloadAllData();
+    renderMain();
+  }catch(err){
+    toast("Erreur : " + err.message, "err");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   MODAL helpers
+--------------------------------------------------------------------------- */
+function showModal(innerHTML){
+  document.getElementById("modalRoot").innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal">${innerHTML}</div></div>`;
+  document.getElementById("modalBackdrop").addEventListener("click", (e)=>{ if(e.target.id==="modalBackdrop") closeModal(); });
+}
+function closeModal(){ document.getElementById("modalRoot").innerHTML = ""; }
+
+/* ---------------------------------------------------------------------------
+   IMPORT / EXPORT CSV
+--------------------------------------------------------------------------- */
+function downloadBlob(content, filename, mime){
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportCSV(key){
+  const def = ENTITIES[key];
+  const rows = CACHE[key] || [];
+  if(!rows.length){ toast("Rien à exporter.", "err"); return; }
+  const cols = ["id", ...def.fields.map(f=>f.key)];
+  const csv = Papa.unparse(rows.map(r => { const o={}; cols.forEach(c=>o[c]=r[c] ?? ""); return o; }));
+  downloadBlob(csv, `${key}_flottemine_${todayISO()}.csv`, "text/csv;charset=utf-8;");
+  toast("Export terminé.", "ok");
+}
+
+function exportRepairsCSV(){
+  const rows = CACHE.repairs.map(r=>{
+    const veh = CACHE.vehicles.find(v=>v.id===r.vehicule_id);
+    return { plaque: veh?veh.plaque:'', type_panne:r.type_panne, description:r.description, priorite:r.priorite,
+      statut:r.statut, date_signalement:r.date_signalement, cout_main_oeuvre:r.cout_main_oeuvre, cout_total:r.cout_total };
+  });
+  if(!rows.length){ toast("Rien à exporter.", "err"); return; }
+  downloadBlob(Papa.unparse(rows), `reparations_flottemine_${todayISO()}.csv`, "text/csv;charset=utf-8;");
+  toast("Export terminé.", "ok");
+}
+
+function renderIOPage(main){
+  main.innerHTML = `
+    <div class="topbar"><div><h2>🔄 Import / Export</h2><div class="sub">Sauvegardez vos données ou importez-les en masse depuis un fichier CSV</div></div></div>
+    <div class="panel">
+      <div class="panel-head"><h3>Exporter</h3></div>
+      <div class="io-grid">
+        ${Object.keys(ENTITIES).map(key => `
+          <div class="io-card"><h4>${ENTITIES[key].icon} ${ENTITIES[key].label}</h4><p>${(CACHE[key]||[]).length} enregistrement(s)</p>
+          <button class="btn secondary sm full" onclick="exportCSV('${key}')">⬇ Exporter en CSV</button></div>
+        `).join("")}
+        <div class="io-card"><h4>🔧 Réparations</h4><p>${CACHE.repairs.length} enregistrement(s)</p>
+        <button class="btn secondary sm full" onclick="exportRepairsCSV()">⬇ Exporter en CSV</button></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Importer</h3></div>
+      <p class="muted" style="font-size:13px;margin-top:-6px;">Le fichier CSV doit contenir les mêmes colonnes que l'export correspondant (première ligne = en-têtes).</p>
+      <div class="io-grid">
+        ${Object.keys(ENTITIES).map(key => `
+          <div class="io-card"><h4>${ENTITIES[key].icon} ${ENTITIES[key].label}</h4>
+          <input type="file" accept=".csv" onchange="importCSV('${key}', event)">
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function importCSV(key, evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const def = ENTITIES[key];
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete: async (results) => {
+      const rows = results.data;
+      if(!rows.length){ toast("Fichier vide ou invalide.", "err"); return; }
+      const payloads = rows.map(r => {
+        const o = {};
+        def.fields.forEach(f => {
+          let v = r[f.key];
+          if(v === undefined || v === "") { v = null; }
+          if(v !== null && f.type === "number") v = Number(v);
+          if(v !== null && f.type === "checkbox") v = String(v).toLowerCase() === "true";
+          o[f.key] = v;
+        });
+        return o;
+      });
+      try{
+        const { error } = await supa.from(def.table).insert(payloads);
+        if(error) throw error;
+        toast(`${payloads.length} ligne(s) importée(s) avec succès.`, "ok");
+        await reloadAllData();
+        renderMain();
+      }catch(err){
+        toast("Erreur d'import : " + err.message, "err");
+      }
+    },
+    error: (err) => toast("Erreur de lecture du CSV : " + err.message, "err"),
+  });
+  evt.target.value = "";
+}
+</script>
+</body>
+</html>
