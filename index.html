@@ -1345,12 +1345,33 @@ function renderAdminTable(){
     }).join("")}
   </tbody></table></div>
   ${totalPages > 1 ? `
-    <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
       <button class="btn secondary sm" ${ADMIN_PAGE<=1?'disabled':''} onclick="adminGoPage(${ADMIN_PAGE-1})">← Précédent</button>
-      <span class="muted" style="font-size:13px;">Page ${ADMIN_PAGE} / ${totalPages} — ${visible.length} client(s)</span>
+      ${adminPageNumbers(ADMIN_PAGE, totalPages).map(p => p === '…'
+        ? `<span class="muted" style="padding:0 4px;">…</span>`
+        : `<button class="btn ${p===ADMIN_PAGE?'':'secondary'} sm" style="min-width:34px;" onclick="adminGoPage(${p})" ${p===ADMIN_PAGE?'disabled':''}>${p}</button>`
+      ).join("")}
       <button class="btn secondary sm" ${ADMIN_PAGE>=totalPages?'disabled':''} onclick="adminGoPage(${ADMIN_PAGE+1})">Suivant →</button>
+      <span class="muted" style="font-size:13px;width:100%;text-align:center;margin-top:4px;">${visible.length} client(s)</span>
     </div>
   ` : ''}`;
+}
+
+function adminPageNumbers(current, total){
+  const pages = [];
+  const add = (p) => { if(!pages.includes(p)) pages.push(p); };
+  add(1);
+  for(let p = current - 1; p <= current + 1; p++){
+    if(p > 1 && p < total) add(p);
+  }
+  if(total > 1) add(total);
+  pages.sort((a,b) => a - b);
+  const withGaps = [];
+  for(let idx = 0; idx < pages.length; idx++){
+    if(idx > 0 && pages[idx] - pages[idx-1] > 1) withGaps.push('…');
+    withGaps.push(pages[idx]);
+  }
+  return withGaps;
 }
 
 function adminFilter(value){
