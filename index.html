@@ -1274,15 +1274,20 @@ function importCSV(key, evt){
    ADMINISTRATION (reserve au proprietaire de l'application)
 --------------------------------------------------------------------------- */
 let ADMIN_ROWS = [];
+let ADMIN_SEARCH = "";
 
 async function renderAdminPage(main){
   if(!currentUser || currentUser.id !== ADMIN_UID){
     main.innerHTML = `<div class="panel"><p>Accès réservé.</p></div>`;
     return;
   }
+  ADMIN_SEARCH = "";
   main.innerHTML = `
     <div class="topbar"><div><h2>🛠️ Administration</h2><div class="sub">Gérez l'essai gratuit et l'abonnement payant de vos clients</div></div></div>
-    <div class="panel"><div id="adminTableWrap">Chargement…</div></div>
+    <div class="panel">
+      <input type="text" id="adminSearch" placeholder="🔍 Rechercher par e-mail…" style="width:100%;max-width:320px;margin-bottom:14px;" oninput="adminFilter(this.value)">
+      <div id="adminTableWrap">Chargement…</div>
+    </div>
   `;
   try{
     const { data, error } = await supa.rpc("admin_list_subscriptions");
@@ -1302,10 +1307,17 @@ function renderAdminTable(){
     wrap.innerHTML = `<p class="muted">Aucun client pour le moment.</p>`;
     return;
   }
+  const q = ADMIN_SEARCH.trim().toLowerCase();
+  const visible = q ? ADMIN_ROWS.filter(r => (r.email || "").toLowerCase().includes(q)) : ADMIN_ROWS;
+  if(!visible.length){
+    wrap.innerHTML = `<p class="muted">Aucun client ne correspond à « ${ADMIN_SEARCH} ».</p>`;
+    return;
+  }
   wrap.innerHTML = `<div class="table-wrap"><table><thead><tr>
     <th>Client</th><th>Statut</th><th>Essai depuis</th><th>Payant jusqu'au</th><th>Action</th>
   </tr></thead><tbody>
-    ${ADMIN_ROWS.map((r, i) => {
+    ${visible.map((r) => {
+      const i = ADMIN_ROWS.indexOf(r);
       const access = computeAccessStatus(r);
       const statusLabel = access.status === "paid" ? "✅ Payant"
         : access.status === "trial" ? `🎁 Essai (${access.daysLeft}j restants)`
@@ -1324,6 +1336,11 @@ function renderAdminTable(){
       </tr>`;
     }).join("")}
   </tbody></table></div>`;
+}
+
+function adminFilter(value){
+  ADMIN_SEARCH = value;
+  renderAdminTable();
 }
 
 async function adminSetPaid(i, isPaid){
