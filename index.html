@@ -311,6 +311,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const TRIAL_DAYS = 30;
 const SUPPORT_WHATSAPP = "24176262952";
 const SUPPORT_EMAIL = "samuelekomo24@gmail.com";
+const ADMIN_UID = "2e9e3ebe-8718-443b-828a-01b5854c7e5b";
 
 /* ============================================================================ */
 
@@ -570,7 +571,10 @@ async function showApp(){
 function renderNav(){
   const insights = computeInsights();
   const navList = document.getElementById("navList");
-  navList.innerHTML = NAV.map(n => {
+  const items = currentUser && currentUser.id === ADMIN_UID
+    ? [...NAV, { key: "admin", label: "Administration", icon: "🛠️" }]
+    : NAV;
+  navList.innerHTML = items.map(n => {
     let badge = "";
     if(n.key === "alerts" && insights.alerts.length){
       badge = `<span class="badge">${insights.alerts.length}</span>`;
@@ -621,6 +625,7 @@ function renderMain(){
   if(activeTab === "alerts") return renderAlertsPage(main);
   if(activeTab === "io") return renderIOPage(main);
   if(activeTab === "repairs") return renderRepairsPage(main);
+  if(activeTab === "admin") return renderAdminPage(main);
   if(ENTITIES[activeTab]) return renderEntityPage(main, activeTab);
 }
 
@@ -1263,6 +1268,81 @@ function importCSV(key, evt){
     error: (err) => toast("Erreur de lecture du CSV : " + err.message, "err"),
   });
   evt.target.value = "";
+}
+
+/* ---------------------------------------------------------------------------
+   ADMINISTRATION (reserve au proprietaire de l'application)
+--------------------------------------------------------------------------- */
+let ADMIN_ROWS = [];
+
+async function renderAdminPage(main){
+  if(!currentUser || currentUser.id !== ADMIN_UID){
+    main.innerHTML = `<div class="panel"><p>Accès réservé.</p></div>`;
+    return;
+  }
+  main.innerHTML = `
+    <div class="topbar"><div><h2>🛠️ Administration</h2><div class="sub">Gérez l'essai gratuit et l'abonnement payant de vos clients</div></div></div>
+    <div class="panel"><div id="adminTableWrap">Chargement…</div></div>
+  `;
+  try{
+    const { data, error } = await supa.rpc("admin_list_subscriptions");
+    if(error) throw error;
+    ADMIN_ROWS = data || [];
+  }catch(err){
+    document.getElementById("adminTableWrap").innerHTML = `<p class="muted">Erreur de chargement : ${err.message}</p>`;
+    return;
+  }
+  renderAdminTable();
+}
+
+function renderAdminTable(){
+  const wrap = document.getElementById("adminTableWrap");
+  if(!wrap) return;
+  if(!ADMIN_ROWS.length){
+    wrap.innerHTML = `<p class="muted">Aucun client pour le moment.</p>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="table-wrap"><table><thead><tr>
+    <th>Client</th><th>Statut</th><th>Essai depuis</th><th>Payant jusqu'au</th><th>Action</th>
+  </tr></thead><tbody>
+    ${ADMIN_ROWS.map((r, i) => {
+      const access = computeAccessStatus(r);
+      const statusLabel = access.status === "paid" ? "✅ Payant"
+        : access.status === "trial" ? `🎁 Essai (${access.daysLeft}j restants)`
+        : "⛔ Expiré";
+      const isMe = r.owner === ADMIN_UID;
+      return `<tr>
+        <td>${r.email}${isMe ? ' <span class="muted">(vous)</span>' : ''}</td>
+        <td>${statusLabel}</td>
+        <td>${fmtDate(r.trial_start)}</td>
+        <td><input type="date" id="paidUntil_${i}" value="${r.paid_until || ''}" style="width:140px;"></td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${r.is_paid
+            ? `<button class="btn secondary sm" onclick="adminSetPaid(${i}, false)">Retirer l'accès payant</button>`
+            : `<button class="btn sm" onclick="adminSetPaid(${i}, true)">Marquer payant</button>`}
+        </td>
+      </tr>`;
+    }).join("")}
+  </tbody></table></div>`;
+}
+
+async function adminSetPaid(i, isPaid){
+  const row = ADMIN_ROWS[i];
+  if(!row) return;
+  const dateInput = document.getElementById(`paidUntil_${i}`);
+  const paidUntil = dateInput && dateInput.value ? dateInput.value : null;
+  try{
+    const { error } = await supa.rpc("admin_set_subscription", {
+      target_owner: row.owner, new_is_paid: isPaid, new_paid_until: paidUntil,
+    });
+    if(error) throw error;
+    row.is_paid = isPaid;
+    row.paid_until = paidUntil;
+    toast(isPaid ? "Client marqué comme payant." : "Accès payant retiré.", "ok");
+    renderAdminTable();
+  }catch(err){
+    toast("Erreur : " + err.message, "err");
+  }
 }
 </script>
 </body>
