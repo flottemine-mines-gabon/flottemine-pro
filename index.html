@@ -71,6 +71,16 @@ input,select,textarea{font-family:inherit;}
 .ok-msg{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#b7f5ce;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;}
 code{background:var(--panel2);padding:2px 6px;border-radius:5px;font-size:12.5px;}
 
+/* ---------- Trial banner / lock screen ---------- */
+.trial-banner{
+  background:rgba(245,178,20,.12);border-bottom:1px solid rgba(245,178,20,.35);color:#ffcf8a;
+  padding:10px 20px;font-size:13.5px;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;
+}
+.trial-banner.urgent{background:rgba(239,68,68,.14);border-bottom-color:rgba(239,68,68,.4);color:#ffb4b4;}
+.trial-banner a{color:inherit;font-weight:700;text-decoration:underline;white-space:nowrap;}
+.lock-actions a, .lock-actions button{display:block;width:100%;text-align:center;text-decoration:none;margin-bottom:10px;}
+
 /* ---------- App layout ---------- */
 #app{display:flex;min-height:100vh;}
 .sidebar{
@@ -240,6 +250,24 @@ input[type=file]{color:var(--muted);font-size:12.5px;}
   </div>
 </div>
 
+<!-- ===================== LOCK SCREEN (essai gratuit termine) ===================== -->
+<div id="lockScreen" class="screen-center hidden">
+  <div class="card" style="max-width:460px;">
+    <div class="logo" style="margin-bottom:14px;">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#ff8a1e"/><path d="M6 20L10 12H16L20 20" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="22.5" r="2.3" fill="#0b0f14"/><circle cx="18.5" cy="22.5" r="2.3" fill="#0b0f14"/><path d="M20 20H24.5L26 16" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Flotte<b>Mine</b> Pro</span>
+    </div>
+    <h1>Essai gratuit terminé</h1>
+    <p class="sub">Votre période d'essai de 30 jours est arrivée à son terme.</p>
+    <div class="error-msg">Pour continuer à utiliser FlotteMine Pro, contactez l'administrateur afin d'activer votre abonnement.</div>
+    <div class="lock-actions">
+      <a class="btn full" href="https://wa.me/24176262952" target="_blank" rel="noopener">💬 Contacter sur WhatsApp</a>
+      <a class="btn secondary full" href="mailto:samuelekomo24@gmail.com">✉️ Envoyer un e-mail</a>
+      <button class="btn secondary full sm" onclick="handleLogout()">Déconnexion</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== APP ===================== -->
 <div id="app" class="hidden">
   <div class="overlay hidden" id="overlay" onclick="closeSidebar()"></div>
@@ -256,6 +284,7 @@ input[type=file]{color:var(--muted);font-size:12.5px;}
   </aside>
 
   <div style="flex:1;min-width:0;">
+    <div id="trialBanner" class="trial-banner hidden"></div>
     <div class="mobile-topbar">
       <button class="hamburger" onclick="openSidebar()">☰</button>
       <div class="logo" style="font-size:15px;"><span>Flotte<b>Mine</b></span></div>
@@ -275,6 +304,13 @@ input[type=file]{color:var(--muted);font-size:12.5px;}
    ============================================================================ */
 const SUPABASE_URL = "https://pgoesbhdbmnjscmvsflv.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnb2VzYmhkYm1uanNjbXZzZmx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyNTgzOTMsImV4cCI6MjEwNDgzNDM5M30.5vZ_99CsSE5r-1j2bZhGvrO76tfmfNac-HbbOxNb1ig";
+
+/* ---------------------------------------------------------------------------
+   Logique commerciale — essai gratuit / verrouillage
+--------------------------------------------------------------------------- */
+const TRIAL_DAYS = 30;
+const SUPPORT_WHATSAPP = "24176262952";
+const SUPPORT_EMAIL = "samuelekomo24@gmail.com";
 
 /* ============================================================================ */
 
@@ -465,11 +501,67 @@ const NAV = [
   { key: "io", label: "Import / Export", icon: "🔄" },
 ];
 
+async function ensureSubscription(){
+  try{
+    const { data, error } = await supa.from("subscriptions").select("*").eq("owner", currentUser.id).maybeSingle();
+    if(error) throw error;
+    if(data) return data;
+    const { data: created, error: insErr } = await supa.from("subscriptions")
+      .insert({ owner: currentUser.id, trial_start: new Date().toISOString(), is_paid: false })
+      .select().single();
+    if(insErr) throw insErr;
+    return created;
+  }catch(e){
+    console.error("Erreur abonnement:", e);
+    // En cas d'erreur reseau/RLS, on n'empeche pas l'acces (fail-open) plutot que de bloquer l'utilisateur a tort.
+    return { is_paid:true, trial_start:new Date().toISOString(), paid_until:null };
+  }
+}
+
+function computeAccessStatus(sub){
+  if(sub.is_paid){
+    if(sub.paid_until && new Date(sub.paid_until) < new Date(todayISO())){
+      return { allowed:false, status:"expired" };
+    }
+    return { allowed:true, status:"paid" };
+  }
+  const daysUsed = daysBetween(sub.trial_start, new Date().toISOString());
+  const daysLeft = TRIAL_DAYS - daysUsed;
+  if(daysLeft <= 0) return { allowed:false, status:"expired", daysLeft:0 };
+  return { allowed:true, status:"trial", daysLeft };
+}
+
+function showLockScreen(){
+  document.getElementById("authScreen").classList.add("hidden");
+  document.getElementById("setupScreen").classList.add("hidden");
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("lockScreen").classList.remove("hidden");
+}
+
+function renderTrialBanner(access){
+  const el = document.getElementById("trialBanner");
+  if(!el) return;
+  if(access.status !== "trial"){ el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.classList.remove("hidden");
+  el.classList.toggle("urgent", access.daysLeft <= 5);
+  const j = access.daysLeft;
+  el.innerHTML = `<span>🎁 Essai gratuit : <b>${j} jour${j>1?"s":""}</b> restant${j>1?"s":""}</span>`
+    + `<a href="https://wa.me/${SUPPORT_WHATSAPP}" target="_blank" rel="noopener">Activer mon abonnement →</a>`;
+}
+
 async function showApp(){
+  document.getElementById("lockScreen").classList.add("hidden");
+  const sub = await ensureSubscription();
+  const access = computeAccessStatus(sub);
+  if(!access.allowed){
+    showLockScreen();
+    return;
+  }
   document.getElementById("authScreen").classList.add("hidden");
   document.getElementById("setupScreen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   document.getElementById("userChip").textContent = currentUser.email;
+  renderTrialBanner(access);
   renderNav();
   await reloadAllData();
   goTab("dashboard");
