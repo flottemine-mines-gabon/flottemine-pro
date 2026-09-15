@@ -1275,6 +1275,8 @@ function importCSV(key, evt){
 --------------------------------------------------------------------------- */
 let ADMIN_ROWS = [];
 let ADMIN_SEARCH = "";
+let ADMIN_PAGE = 1;
+const ADMIN_PAGE_SIZE = 15;
 
 async function renderAdminPage(main){
   if(!currentUser || currentUser.id !== ADMIN_UID){
@@ -1282,6 +1284,7 @@ async function renderAdminPage(main){
     return;
   }
   ADMIN_SEARCH = "";
+  ADMIN_PAGE = 1;
   main.innerHTML = `
     <div class="topbar"><div><h2>🛠️ Administration</h2><div class="sub">Gérez l'essai gratuit et l'abonnement payant de vos clients</div></div></div>
     <div class="panel">
@@ -1313,10 +1316,15 @@ function renderAdminTable(){
     wrap.innerHTML = `<p class="muted">Aucun client ne correspond à « ${ADMIN_SEARCH} ».</p>`;
     return;
   }
+  const totalPages = Math.max(1, Math.ceil(visible.length / ADMIN_PAGE_SIZE));
+  if(ADMIN_PAGE > totalPages) ADMIN_PAGE = totalPages;
+  if(ADMIN_PAGE < 1) ADMIN_PAGE = 1;
+  const start = (ADMIN_PAGE - 1) * ADMIN_PAGE_SIZE;
+  const pageRows = visible.slice(start, start + ADMIN_PAGE_SIZE);
   wrap.innerHTML = `<div class="table-wrap"><table><thead><tr>
     <th>Client</th><th>Statut</th><th>Essai depuis</th><th>Payant jusqu'au</th><th>Action</th>
   </tr></thead><tbody>
-    ${visible.map((r) => {
+    ${pageRows.map((r) => {
       const i = ADMIN_ROWS.indexOf(r);
       const access = computeAccessStatus(r);
       const statusLabel = access.status === "paid" ? "✅ Payant"
@@ -1335,11 +1343,24 @@ function renderAdminTable(){
         </td>
       </tr>`;
     }).join("")}
-  </tbody></table></div>`;
+  </tbody></table></div>
+  ${totalPages > 1 ? `
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
+      <button class="btn secondary sm" ${ADMIN_PAGE<=1?'disabled':''} onclick="adminGoPage(${ADMIN_PAGE-1})">← Précédent</button>
+      <span class="muted" style="font-size:13px;">Page ${ADMIN_PAGE} / ${totalPages} — ${visible.length} client(s)</span>
+      <button class="btn secondary sm" ${ADMIN_PAGE>=totalPages?'disabled':''} onclick="adminGoPage(${ADMIN_PAGE+1})">Suivant →</button>
+    </div>
+  ` : ''}`;
 }
 
 function adminFilter(value){
   ADMIN_SEARCH = value;
+  ADMIN_PAGE = 1;
+  renderAdminTable();
+}
+
+function adminGoPage(page){
+  ADMIN_PAGE = page;
   renderAdminTable();
 }
 
