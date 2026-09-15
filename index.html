@@ -230,6 +230,22 @@ input[type=file]{color:var(--muted);font-size:12.5px;}
   </div>
 </div>
 
+<!-- ===================== WELCOME / LANDING SCREEN ===================== -->
+<div id="welcomeScreen" class="screen-center hidden">
+  <div class="card" style="max-width:460px;">
+    <div class="logo" style="margin-bottom:18px;">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#ff8a1e"/><path d="M6 20L10 12H16L20 20" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="22.5" r="2.3" fill="#0b0f14"/><circle cx="18.5" cy="22.5" r="2.3" fill="#0b0f14"/><path d="M20 20H24.5L26 16" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Flotte<b>Mine</b> Pro</span>
+    </div>
+    <h1>Bienvenue sur FlotteMine Pro</h1>
+    <p class="sub">La solution tout-en-un pour gérer votre flotte, vos chauffeurs, votre stock de pièces et votre maintenance. Créez votre compte pour commencer votre essai gratuit de 30 jours — sans carte bancaire.</p>
+    <div class="lock-actions">
+      <button class="btn full" onclick="goToAuth('signup')">🚀 Créer un compte gratuitement</button>
+      <button class="btn secondary full" onclick="goToAuth('login')">J'ai déjà un compte — Se connecter</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== AUTH SCREEN ===================== -->
 <div id="authScreen" class="screen-center hidden">
   <div class="card">
@@ -237,6 +253,7 @@ input[type=file]{color:var(--muted);font-size:12.5px;}
       <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#ff8a1e"/><path d="M6 20L10 12H16L20 20" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="22.5" r="2.3" fill="#0b0f14"/><circle cx="18.5" cy="22.5" r="2.3" fill="#0b0f14"/><path d="M20 20H24.5L26 16" stroke="#0b0f14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Flotte<b>Mine</b> Pro</span>
     </div>
+    <button class="link-btn" style="margin-bottom:10px;" onclick="backToWelcome()">← Retour</button>
     <h1 id="authTitle">Connexion</h1>
     <p class="sub" id="authSub">Gestion de flotte, chauffeurs, stock et maintenance</p>
     <div id="authMsg"></div>
@@ -428,7 +445,7 @@ async function init(){
     currentUser = session.user;
     await showApp();
   } else {
-    document.getElementById("authScreen").classList.remove("hidden");
+    document.getElementById("welcomeScreen").classList.remove("hidden");
   }
 
   supa.auth.onAuthStateChange((event, session) => {
@@ -438,7 +455,8 @@ async function init(){
     if(event === "SIGNED_OUT"){
       currentUser = null;
       document.getElementById("app").classList.add("hidden");
-      document.getElementById("authScreen").classList.remove("hidden");
+      document.getElementById("authScreen").classList.add("hidden");
+      document.getElementById("welcomeScreen").classList.remove("hidden");
     }
   });
 }
@@ -446,12 +464,28 @@ async function init(){
 /* ---------------------------------------------------------------------------
    Auth
 --------------------------------------------------------------------------- */
+function goToAuth(mode){
+  document.getElementById("welcomeScreen").classList.add("hidden");
+  document.getElementById("authScreen").classList.remove("hidden");
+  document.getElementById("authMsg").innerHTML = "";
+  setAuthMode(mode);
+}
+
+function backToWelcome(){
+  document.getElementById("authScreen").classList.add("hidden");
+  document.getElementById("welcomeScreen").classList.remove("hidden");
+}
+
+function setAuthMode(mode){
+  authMode = mode;
+  document.getElementById("authTitle").textContent = mode === "login" ? "Connexion" : "Créer un compte";
+  document.getElementById("authSubmitBtn").textContent = mode === "login" ? "Se connecter" : "Créer mon compte";
+  document.getElementById("authSwitchLabel").textContent = mode === "login" ? "Pas encore de compte ?" : "Déjà inscrit ?";
+  document.getElementById("authSwitchBtn").textContent = mode === "login" ? "Créer un compte" : "Se connecter";
+}
+
 function toggleAuthMode(){
-  authMode = authMode === "login" ? "signup" : "login";
-  document.getElementById("authTitle").textContent = authMode === "login" ? "Connexion" : "Créer un compte";
-  document.getElementById("authSubmitBtn").textContent = authMode === "login" ? "Se connecter" : "Créer mon compte";
-  document.getElementById("authSwitchLabel").textContent = authMode === "login" ? "Pas encore de compte ?" : "Déjà inscrit ?";
-  document.getElementById("authSwitchBtn").textContent = authMode === "login" ? "Créer un compte" : "Se connecter";
+  setAuthMode(authMode === "login" ? "signup" : "login");
   document.getElementById("authMsg").innerHTML = "";
 }
 
@@ -476,7 +510,7 @@ async function handleAuthSubmit(){
         await showApp();
       } else {
         msgEl.innerHTML = `<div class="ok-msg">Compte créé. Vérifiez votre e-mail si une confirmation est requise, puis connectez-vous.</div>`;
-        toggleAuthMode();
+        setAuthMode("login");
       }
     }
   }catch(err){
@@ -533,6 +567,7 @@ function computeAccessStatus(sub){
 }
 
 function showLockScreen(){
+  document.getElementById("welcomeScreen").classList.add("hidden");
   document.getElementById("authScreen").classList.add("hidden");
   document.getElementById("setupScreen").classList.add("hidden");
   document.getElementById("app").classList.add("hidden");
@@ -558,6 +593,7 @@ async function showApp(){
     showLockScreen();
     return;
   }
+  document.getElementById("welcomeScreen").classList.add("hidden");
   document.getElementById("authScreen").classList.add("hidden");
   document.getElementById("setupScreen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
